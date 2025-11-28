@@ -1,0 +1,235 @@
+version: '3.8'
+
+services:
+  # Next.js Application
+  karsaz-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: karsaz-app
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_SUPABASE_URL=http://api.irantrench.com
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
+      - SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
+      - DATABASE_URL=postgresql://postgres:postgres@supabase-db:5432/postgres
+    depends_on:
+      - supabase-db
+      - supabase-api
+    networks:
+      - karsaz-network
+    restart: unless-stopped
+
+  # Supabase Database
+  supabase-db:
+    image: supabase/postgres:15.1.0.147
+    container_name: supabase-db
+    ports:
+      - "54322:5432"
+    environment:
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_DB=postgres
+    volumes:
+      - supabase-db-data:/var/lib/postgresql/data
+      - ./supabase/migrations:/docker-entrypoint-initdb.d
+    networks:
+      - karsaz-network
+    restart: unless-stopped
+
+  # Supabase API (Kong + PostgREST)
+  supabase-api:
+    image: supabase/kong:2.8.3
+    container_name: supabase-api
+    ports:
+      - "54321:8000"
+    environment:
+      - KONG_DATABASE=off
+      - KONG_DECLARATIVE_CONFIG=/var/lib/kong/kong.yml
+      - KONG_DNS_ORDER=LAST,A,CNAME
+      - KONG_PLUGINS=request-transformer,cors,key-auth,acl,basic-auth
+      - KONG_NGINX_PROXY_PROXY_BUFFER_SIZE=160k
+      - KONG_NGINX_PROXY_PROXY_BUFFERS=64 160k
+    volumes:
+      - ./supabase/config/kong.yml:/var/lib/kong/kong.yml:ro
+    depends_on:
+      - supabase-db
+      - supabase-rest
+      - supabase-auth
+    networks:
+      - karsaz-network
+    restart: unless-stopped
+
+  # PostgREST
+  supabase-rest:
+    image: postgrest/postgrest:v12.0.1
+    container_name: supabase-rest
+    environment:
+      - PGRST_DB_URI=postgresql://authenticator:postgres@supabase-db:5432/postgres
+      - PGRST_DB_SCHEMAS=public,storage,graphql_public
+      - PGRST_DB_ANON_ROLE=anon
+      - PGRST_JWT_SECRET=super-secret-jwt-token-with-at-least-32-characters-long
+      - PGRST_DB_USE_LEGACY_GUCS=false
+      - PGRST_APP_SETTINGS_JWT_SECRET=super-secret-jwt-token-with-at-least-32-characters-long
+      - PGRST_APP_SETTINGS_JWT_EXP=3600
+    depends_on:
+      - supabase-db
+    networks:
+      - karsaz-network
+    restart: unless-stopped
+
+  # Supabase Auth (GoTrue)
+  supabase-auth:
+    image: supabase/gotrue:v2.143.0
+    container_name: supabase-auth
+    environment:
+      - GOTRUE_API_HOST=0.0.0.0
+      - GOTRUE_API_PORT=9999
+      - API_EXTERNAL_URL=http://api.irantrench.com
+      - GOTRUE_DB_DRIVER=postgres
+      - GOTRUE_DB_DATABASE_URL=postgresql://supabase_auth_admin:postgres@supabase-db:5432/postgres
+      - GOTRUE_SITE_URL=http://irantrench.com
+      - GOTRUE_URI_ALLOW_LIST=http://irantrench.com,http://localhost:3000
+      - GOTRUE_DISABLE_SIGNUP=false
+      - GOTRUE_JWT_ADMIN_ROLES=service_role
+      - GOTRUE_JWT_AUD=authenticated
+      - GOTRUE_JWT_DEFAULT_GROUP_NAME=authenticated
+      - GOTRUE_JWT_EXP=3600
+      - GOTRUE_JWT_SECRET=super-secret-jwt-token-with-at-least-32-characters-long
+      - GOTRUE_EXTERNAL_EMAIL_ENABLED=true
+      - GOTRUE_MAILER_AUTOCONFIRM=false
+      - GOTRUE_SMTP_ADMIN_EMAIL=admin@irantrench.com
+      - GOTRUE_SMTP_HOST=supabase-inbucket
+      - GOTRUE_SMTP_PORT=2500
+      - GOTRUE_SMTP_USER=fake_mail_user
+      - GOTRUE_SMTP_PASS=fake_mail_password
+      - GOTRUE_SMTP_SENDER_NAME=fake_sender
+      - GOTRUE_MAILER_URLPATHS_INVITE=/auth/v1/verify
+      - GOTRUE_MAILER_URLPATHS_CONFIRMATION=/auth/v1/verify
+      - GOTRUE_MAILER_URLPATHS_RECOVERY=/auth/v1/verify
+      - GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE=/auth/v1/verify
+    depends_on:
+      - supabase-db
+    networks:
+      - karsaz-network
+    restart: unless-stopped
+
+  # Supabase Studio
+  supabase-studio:
+    image: supabase/studio:20240326-5e5586d
+    container_name: supabase-studio
+    ports:
+      - "54323:3000"
+    environment:
+      - STUDIO_PG_META_URL=http://supabase-meta:8080
+      - POSTGRES_PASSWORD=postgres
+      - DEFAULT_ORGANIZATION_NAME=Karsaz
+      - DEFAULT_PROJECT_NAME=Karsaz App
+      - SUPABASE_URL=http://api.irantrench.com
+      - SUPABASE_REST_URL=http://supabase-api:8000/rest/v1/
+      - SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
+      - SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
+    networks:
+      - karsaz-network
+    restart: unless-stopped
+
+  # Supabase Meta
+  supabase-meta:
+    image: supabase/postgres-meta:v0.80.0
+    container_name: supabase-meta
+    environment:
+      - PG_META_PORT=8080
+      - PG_META_DB_HOST=supabase-db
+      - PG_META_DB_PORT=5432
+      - PG_META_DB_NAME=postgres
+      - PG_META_DB_USER=supabase_admin
+      - PG_META_DB_PASSWORD=postgres
+    depends_on:
+      - supabase-db
+    networks:
+      - karsaz-network
+    restart: unless-stopped
+
+  # Supabase Storage
+  supabase-storage:
+    image: supabase/storage-api:v1.0.6
+    container_name: supabase-storage
+    environment:
+      - ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
+      - SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
+      - POSTGREST_URL=http://supabase-rest:3000
+      - PGOPTIONS=-c search_path=storage,public
+      - DATABASE_URL=postgresql://supabase_storage_admin:postgres@supabase-db:5432/postgres
+      - FILE_SIZE_LIMIT=52428800
+      - STORAGE_BACKEND=file
+      - FILE_STORAGE_BACKEND_PATH=/var/lib/storage
+      - TENANT_ID=stub
+      - REGION=stub
+      - GLOBAL_S3_BUCKET=stub
+      - ENABLE_IMAGE_TRANSFORMATION=true
+      - IMGPROXY_URL=http://supabase-imgproxy:5001
+    volumes:
+      - supabase-storage-data:/var/lib/storage
+    depends_on:
+      - supabase-db
+      - supabase-rest
+    networks:
+      - karsaz-network
+    restart: unless-stopped
+
+  # Image Proxy for Storage
+  supabase-imgproxy:
+    image: darthsim/imgproxy:v3.8.0
+    container_name: supabase-imgproxy
+    environment:
+      - IMGPROXY_BIND=0.0.0.0:5001
+      - IMGPROXY_LOCAL_FILESYSTEM_ROOT=/
+      - IMGPROXY_USE_ETAG=true
+      - IMGPROXY_ENABLE_WEBP_DETECTION=true
+    volumes:
+      - supabase-storage-data:/var/lib/storage:ro
+    networks:
+      - karsaz-network
+    restart: unless-stopped
+
+  # Inbucket (Email testing)
+  supabase-inbucket:
+    image: inbucket/inbucket:3.0.3
+    container_name: supabase-inbucket
+    ports:
+      - "54324:9000"
+    environment:
+      - INBUCKET_WEB_ADDR=0.0.0.0:9000
+      - INBUCKET_POP3_ADDR=0.0.0.0:1100
+      - INBUCKET_SMTP_ADDR=0.0.0.0:2500
+    networks:
+      - karsaz-network
+    restart: unless-stopped
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: karsaz-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+    depends_on:
+      - karsaz-app
+      - supabase-api
+      - supabase-studio
+    networks:
+      - karsaz-network
+    restart: unless-stopped
+
+volumes:
+  supabase-db-data:
+  supabase-storage-data:
+
+networks:
+  karsaz-network:
+    driver: bridge

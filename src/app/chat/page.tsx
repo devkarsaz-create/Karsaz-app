@@ -55,7 +55,7 @@ async function getChatList(userId: string): Promise<ChatListItem[]> {
 }
 
 export default async function ChatPage() {
-  const supabaseServer = createSupabaseServerClient();
+  const supabaseServer = await createSupabaseServerClient();
   const { data: { user } } = await supabaseServer.auth.getUser();
 
   if (!user) {

@@ -27,7 +27,7 @@ async function getUserFavoriteAds(userId: string): Promise<Ad[]> {
 }
 
 export default async function FavoritesPage() {
-  const supabaseServer = createSupabaseServerClient();
+  const supabaseServer = await createSupabaseServerClient();
   const { data: { user } } = await supabaseServer.auth.getUser();
 
   if (!user) {

@@ -102,3 +102,6 @@ jspm_packages/
 # Supabase
 .branches
 .temp
+
+.gemini/
+gha-creds-*.json

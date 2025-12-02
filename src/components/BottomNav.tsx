@@ -1,121 +1,79 @@
-// src/components/BottomNav.tsx
+"use client";
+
 import React from 'react';
 import Link from 'next/link';
-
-// A simple placeholder icon component
-const NavIcon = ({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) => (
-  <div className="flex flex-col items-center justify-center space-y-1">
-    {children}
-    <span className="text-xs">{label}</span>
-  </div>
-);
+import { usePathname } from 'next/navigation';
+import { Home, Heart, Plus, MessageCircle, User } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { motion } from 'framer-motion';
 
 const BottomNav = () => {
+  const pathname = usePathname();
+
+  const navItems = [
+    { href: '/', label: 'خانه', icon: Home },
+    { href: '/favorites', label: 'ذخیره شده', icon: Heart },
+    { href: '/new-ad', label: 'ثبت آگهی', icon: Plus, isPrimary: true },
+    { href: '/chat', label: 'چت', icon: MessageCircle },
+    { href: '/profile', label: 'پروفایل', icon: User },
+  ];
+
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-gray-800 text-gray-300 shadow-lg z-50">
-      <div className="container mx-auto px-4 h-16 flex justify-around items-center">
-        <Link href="/" className="hover:text-white">
-          <NavIcon label="خانه">
-            {/* Placeholder for Home icon */}
-            <svg
-              className="w-6 h-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
-              ></path>
-            </svg>
-          </NavIcon>
-        </Link>
-        <Link href="/favorites" className="hover:text-white">
-          <NavIcon label="ذخیره شده">
-            {/* Placeholder for Saved Ads icon */}
-            <svg
-              className="w-6 h-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"
-              ></path>
-            </svg>
-          </NavIcon>
-        </Link>
-        <Link
-          href="/new-ad"
-          className="bg-indigo-600 text-white rounded-full w-14 h-14 flex items-center justify-center -mt-6 shadow-lg hover:bg-indigo-700"
-        >
-          {/* Placeholder for Add icon */}
-          <svg
-            className="w-8 h-8"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-            ></path>
-          </svg>
-        </Link>
-        <Link href="/chat" className="hover:text-white">
-          <NavIcon label="چت">
-            {/* Placeholder for Chat icon */}
-            <svg
-              className="w-6 h-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-              ></path>
-            </svg>
-          </NavIcon>
-        </Link>
-        <Link href="/profile" className="hover:text-white">
-          <NavIcon label="کاربری">
-            {/* Placeholder for Profile icon */}
-            <svg
-              className="w-6 h-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-              ></path>
-            </svg>
-          </NavIcon>
-        </Link>
+    <nav className="fixed bottom-0 left-0 right-0 z-50 glass-effect border-t border-white/10 safe-area-inset-bottom">
+      <div className="container mx-auto px-2">
+        <div className="flex justify-around items-center h-16 relative">
+          {navItems.map((item, index) => {
+            const Icon = item.icon;
+            const isActive = pathname === item.href || (item.href !== '/' && pathname?.startsWith(item.href));
+            
+            if (item.isPrimary) {
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className="relative -mt-6 z-10"
+                >
+                  <motion.div
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
+                    className={cn(
+                      "flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 text-white shadow-2xl shadow-purple-500/50",
+                      "hover:shadow-purple-500/70 transition-all"
+                    )}
+                  >
+                    <Icon className="h-7 w-7" />
+                  </motion.div>
+                  <div className="absolute inset-0 rounded-full bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 opacity-0 blur-2xl group-hover:opacity-50 transition-opacity"></div>
+                </Link>
+              );
+            }
+
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "flex flex-col items-center justify-center gap-1 flex-1 py-2 rounded-lg transition-all relative group",
+                  isActive
+                    ? "text-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {isActive && (
+                  <motion.div
+                    layoutId="activeTab"
+                    className="absolute inset-0 bg-primary/10 rounded-lg"
+                    transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                  />
+                )}
+                <Icon className={cn("h-5 w-5 relative z-10", isActive && "text-primary")} />
+                <span className={cn("text-xs font-medium relative z-10", isActive && "text-primary")}>
+                  {item.label}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
       </div>
     </nav>
   );

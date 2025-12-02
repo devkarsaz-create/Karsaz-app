@@ -1,13 +1,14 @@
 {
-  "name": "کارساز",
+  "name": "کارساز - پلتفرم آگهی و نیازمندی",
   "short_name": "کارساز",
-  "description": "پلتفرم تخصصی برای یافتن و ارائه خدمات",
-  "theme_color": "#1a202c",
-  "background_color": "#1a202c",
+  "description": "بهترین پلتفرم برای انتشار و جستجوی آگهی‌ها و نیازمندی‌ها",
+  "theme_color": "#0f172a",
+  "background_color": "#0f172a",
   "display": "standalone",
-  "orientation": "portrait",
+  "orientation": "any",
   "scope": "/",
   "start_url": "/",
+  "categories": ["business", "shopping", "social"],
   "icons": [
     {
       "src": "/icons/icon-72x72.png",

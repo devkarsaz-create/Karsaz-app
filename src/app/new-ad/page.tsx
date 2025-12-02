@@ -1,15 +1,11 @@
-// src/app/new-ad/page.tsx
 import NewAdForm from '@/components/NewAdForm';
 import { Category } from '@/lib/supabase';
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseClient = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+import { createSupabaseServerClient } from '@/lib/supabase-server';
+import { redirect } from 'next/navigation';
 
 async function getCategories(): Promise<Category[]> {
-  const { data, error } = await supabaseClient.from('categories').select('*');
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.from('categories').select('*').order('sort_order');
 
   if (error) {
     console.error('Error fetching categories:', error);
@@ -19,11 +15,17 @@ async function getCategories(): Promise<Category[]> {
 }
 
 export default async function NewAdPage() {
+  const supabase = await createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect('/login?redirect=/new-ad');
+  }
+
   const categories = await getCategories();
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-4">ثبت آگهی جدید</h1>
+    <div className="container mx-auto px-4 py-8">
       <NewAdForm categories={categories} />
     </div>
   );

@@ -1,0 +1,400 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enums
+enum UserRole {
+  USER
+  ADMIN
+  MODERATOR
+}
+
+enum UserSubscriptionType {
+  FREE
+  BASIC
+  PREMIUM
+}
+
+enum AdStatus {
+  DRAFT
+  ACTIVE
+  SOLD
+  EXPIRED
+  SUSPENDED
+  DELETED
+}
+
+enum AdPriceType {
+  FIXED
+  NEGOTIABLE
+  FREE
+  CONTACT
+}
+
+enum AdCondition {
+  NEW
+  LIKE_NEW
+  GOOD
+  FAIR
+  POOR
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  FILE
+  LOCATION
+  CONTACT
+}
+
+enum ConversationStatus {
+  ACTIVE
+  ARCHIVED
+  BLOCKED
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELED
+  EXPIRED
+  PAST_DUE
+}
+
+enum SubscriptionInterval {
+  MONTH
+  YEAR
+}
+
+enum ReportType {
+  SPAM
+  INAPPROPRIATE
+  FAKE
+  SCAM
+  OTHER
+}
+
+enum ReportStatus {
+  PENDING
+  REVIEWED
+  RESOLVED
+  DISMISSED
+}
+
+enum NotificationType {
+  MESSAGE
+  AD_EXPIRED
+  AD_SOLD
+  SUBSCRIPTION
+  SYSTEM
+}
+
+// Models
+model User {
+  id                    String                @id @default(cuid())
+  email                 String                @unique
+  emailVerified         DateTime?
+  password              String?
+  fullName              String?
+  avatarUrl             String?
+  phone                 String?               @unique
+  phoneVerified         DateTime?
+  location              String?
+  bio                   String?
+  isVerified            Boolean               @default(false)
+  isPremium             Boolean               @default(false)
+  role                  UserRole              @default(USER)
+  subscriptionType      UserSubscriptionType  @default(FREE)
+  subscriptionExpiresAt DateTime?
+  settings              Json                  @default("{}")
+  socialLinks           Json                  @default("{}")
+  rating                Decimal?              @db.Decimal(3, 2)
+  totalRatings          Int                   @default(0)
+  lastSeenAt            DateTime?
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  // Relations
+  ads                   Ad[]
+  favorites             Favorite[]
+  sentMessages          Message[]             @relation("SentMessages")
+  receivedMessages      Message[]             @relation("ReceivedMessages")
+  buyerConversations    Conversation[]        @relation("BuyerConversations")
+  sellerConversations   Conversation[]        @relation("SellerConversations")
+  subscriptions         Subscription[]
+  notifications         Notification[]
+  sentReports           Report[]              @relation("SentReports")
+  receivedReports       Report[]              @relation("ReceivedReports")
+  adViews               AdView[]
+  refreshTokens         RefreshToken[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+model Category {
+  id              String     @id @default(cuid())
+  name            String
+  nameEn          String?
+  slug            String     @unique
+  icon            String
+  color           String?
+  parentId        String?
+  level           Int        @default(0)
+  sortOrder       Int        @default(0)
+  isActive        Boolean    @default(true)
+  metaTitle       String?
+  metaDescription String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  // Relations
+  parent          Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children        Category[] @relation("CategoryHierarchy")
+  ads             Ad[]       @relation("AdCategory")
+  subcategoryAds  Ad[]       @relation("AdSubcategory")
+
+  @@map("categories")
+}
+
+model Ad {
+  id               String        @id @default(cuid())
+  title            String
+  description      String
+  price            Decimal?      @db.Decimal(15, 2)
+  priceType        AdPriceType   @default(FIXED)
+  currency         String        @default("IRR")
+  categoryId       String
+  subcategoryId    String?
+  userId           String
+  location         String
+  coordinates      Json?
+  images           String[]      @default([])
+  videoUrl         String?
+  contactInfo      Json          @default("{}")
+  specifications   Json          @default("{}")
+  condition        AdCondition?
+  brand            String?
+  model            String?
+  year             Int?
+  isUrgent         Boolean       @default(false)
+  isFeatured       Boolean       @default(false)
+  isPromoted       Boolean       @default(false)
+  featuredUntil    DateTime?
+  promotedUntil    DateTime?
+  status           AdStatus      @default(DRAFT)
+  viewsCount       Int           @default(0)
+  favoritesCount   Int           @default(0)
+  messagesCount    Int           @default(0)
+  boostScore       Int           @default(0)
+  qualityScore     Int           @default(50)
+  tags             String[]      @default([])
+  externalId       String?
+  source           String?
+  publishedAt      DateTime?
+  expiresAt        DateTime?
+  soldAt           DateTime?
+  deletedAt        DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  // Relations
+  category         Category      @relation("AdCategory", fields: [categoryId], references: [id])
+  subcategory      Category?     @relation("AdSubcategory", fields: [subcategoryId], references: [id])
+  user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  favorites        Favorite[]
+  conversations    Conversation[]
+  messages         Message[]
+  views            AdView[]
+  reports          Report[]
+
+  @@map("ads")
+}
+
+model Favorite {
+  id        String   @id @default(cuid())
+  userId    String
+  adId      String
+  createdAt DateTime @default(now())
+
+  // Relations
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ad        Ad       @relation(fields: [adId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, adId])
+  @@map("favorites")
+}
+
+model Conversation {
+  id                  String             @id @default(cuid())
+  adId                String
+  buyerId             String
+  sellerId            String
+  status              ConversationStatus @default(ACTIVE)
+  lastMessageId       String?
+  lastMessageAt       DateTime?
+  unreadCountBuyer    Int                @default(0)
+  unreadCountSeller   Int                @default(0)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  // Relations
+  ad                  Ad                 @relation(fields: [adId], references: [id], onDelete: Cascade)
+  buyer               User               @relation("BuyerConversations", fields: [buyerId], references: [id], onDelete: Cascade)
+  seller              User               @relation("SellerConversations", fields: [sellerId], references: [id], onDelete: Cascade)
+  messages            Message[]
+
+  @@unique([adId, buyerId, sellerId])
+  @@map("conversations")
+}
+
+model Message {
+  id             String      @id @default(cuid())
+  conversationId String
+  adId           String
+  senderId       String
+  receiverId     String
+  content        String
+  messageType    MessageType @default(TEXT)
+  attachments    Json?
+  isRead         Boolean     @default(false)
+  isSystem       Boolean     @default(false)
+  replyToId      String?
+  readAt         DateTime?
+  deletedAt      DateTime?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  // Relations
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  ad             Ad           @relation(fields: [adId], references: [id], onDelete: Cascade)
+  sender         User         @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver       User         @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  replyTo        Message?     @relation("MessageReplies", fields: [replyToId], references: [id])
+  replies        Message[]    @relation("MessageReplies")
+
+  @@map("messages")
+}
+
+model AdView {
+  id        String   @id @default(cuid())
+  adId      String
+  userId    String?
+  ipAddress String?
+  userAgent String?
+  referrer  String?
+  sessionId String?
+  createdAt DateTime @default(now())
+
+  // Relations
+  ad        Ad       @relation(fields: [adId], references: [id], onDelete: Cascade)
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("ad_views")
+}
+
+model Subscription {
+  id                   String             @id @default(cuid())
+  userId               String
+  planType             String
+  status               SubscriptionStatus @default(ACTIVE)
+  currentPeriodStart   DateTime
+  currentPeriodEnd     DateTime
+  cancelAtPeriodEnd    Boolean            @default(false)
+  paymentMethod        String?
+  amount               Decimal            @db.Decimal(10, 2)
+  currency             String             @default("IRR")
+  interval             SubscriptionInterval @default(MONTH)
+  trialStart           DateTime?
+  trialEnd             DateTime?
+  metadata             Json               @default("{}")
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  // Relations
+  user                 User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String
+  data      Json?
+  isRead    Boolean          @default(false)
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  // Relations
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model Report {
+  id              String       @id @default(cuid())
+  reporterId      String
+  reportedUserId  String?
+  reportedAdId    String?
+  type            ReportType
+  reason          String
+  description     String?
+  status          ReportStatus @default(PENDING)
+  adminNotes      String?
+  resolvedAt      DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  // Relations
+  reporter        User         @relation("SentReports", fields: [reporterId], references: [id], onDelete: Cascade)
+  reportedUser    User?        @relation("ReceivedReports", fields: [reportedUserId], references: [id], onDelete: Cascade)
+  reportedAd      Ad?          @relation(fields: [reportedAdId], references: [id], onDelete: Cascade)
+
+  @@map("reports")
+}
+
+// Indexes
+model SearchIndex {
+  id        String   @id @default(cuid())
+  adId      String   @unique
+  content   String
+  vector    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("search_indexes")
+}
+
+model Analytics {
+  id        String   @id @default(cuid())
+  date      DateTime @db.Date
+  metric    String
+  value     Int
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@unique([date, metric])
+  @@map("analytics")
+}

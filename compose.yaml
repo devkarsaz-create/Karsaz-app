@@ -1,0 +1,6 @@
+services:
+  karsazapp:
+    image: karsazapp
+    build:
+      context: .
+      dockerfile: ./Dockerfile

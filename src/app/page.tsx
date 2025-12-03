@@ -1,161 +1,64 @@
-import { Ad } from '@/lib/supabase';
-import AdCard from '@/components/AdCard';
-import { createSupabaseServerClient } from '@/lib/supabase-server';
-import { createClient } from '@supabase/supabase-js';
 import { Suspense } from 'react';
+import { Ad } from '@/types';
+import { getFeaturedAds, getRecentAds, getUserFavorites } from '@/lib/api';
+import AdCard from '@/components/AdCard';
 import CategoryList from '@/components/CategoryList';
 import { Card, CardContent } from '@/components/ui/card';
 import { Zap, Sparkles } from 'lucide-react';
 import HeroSection from '@/components/HeroSection';
 import StatsSection from '@/components/StatsSection';
 
-const supabaseClient = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
-async function getFeaturedAds(): Promise<Ad[]> {
-  try {
-    const { data, error } = await supabaseClient
-      .from('ads')
-      .select('*')
-      .eq('status', 'active')
-      .eq('is_featured', true)
-      .or('featured_until.is.null,featured_until.gt.' + new Date().toISOString())
-      .order('created_at', { ascending: false })
-      .limit(8);
-
-    if (error) {
-      // اگر جدول وجود ندارد، آرایه خالی برگردان
-      if (error.code === 'PGRST116' || error.message?.includes('relation') || error.message?.includes('does not exist')) {
-        return [];
-      }
-      console.error('Error fetching featured ads:', error);
-      return [];
-    }
-    return data || [];
-  } catch (err) {
-    console.warn('Error connecting to Supabase:', err);
-    return [];
-  }
-}
-
-async function getRecentAds(): Promise<Ad[]> {
-  try {
-    const { data, error } = await supabaseClient
-      .from('ads')
-      .select('*')
-      .eq('status', 'active')
-      .order('is_featured', { ascending: false })
-      .order('created_at', { ascending: false })
-      .limit(20);
-
-    if (error) {
-      // اگر جدول وجود ندارد، آرایه خالی برگردان
-      if (error.code === 'PGRST116' || error.message?.includes('relation') || error.message?.includes('does not exist')) {
-        console.warn('Ads table does not exist yet. Run migrations first.');
-        return [];
-      }
-      console.error('Error fetching recent ads:', error);
-      return [];
-    }
-    return data || [];
-  } catch (err) {
-    console.warn('Error connecting to Supabase:', err);
-    return [];
-  }
-}
-
-async function getUserFavorites(userId: string): Promise<string[]> {
-  try {
-    const supabase = await createSupabaseServerClient();
-    const { data, error } = await supabase
-      .from('favorites')
-      .select('ad_id')
-      .eq('user_id', userId);
-
-    if (error) {
-      if (error.code === 'PGRST116' || error.message?.includes('relation') || error.message?.includes('does not exist')) {
-        return [];
-      }
-      console.error('Error fetching user favorites:', error);
-      return [];
-    }
-    return data?.map((fav) => fav.ad_id) || [];
-  } catch (err) {
-    console.warn('Error connecting to Supabase for favorites:', err);
-    return [];
-  }
-}
+// NOTE: User auth functionality is temporarily disabled pending backend integration.
 
 export default async function Home({
   searchParams,
 }: {
-  searchParams: Promise<{ search?: string; category?: string }>;
+  searchParams: { [key: string]: string | string[] | undefined };
 }) {
-  const params = await searchParams;
-  let user = null;
-  let userFavoriteAdIds: string[] = [];
-  
-  try {
-    const supabaseServer = await createSupabaseServerClient();
-    const { data: { user: authUser } } = await supabaseServer.auth.getUser();
-    user = authUser;
-    
-    if (user) {
-      userFavoriteAdIds = await getUserFavorites(user.id);
-    }
-  } catch (err) {
-    console.warn('Error getting user:', err);
-  }
+  const search = typeof searchParams.search === 'string' ? searchParams.search : undefined;
+  const category = typeof searchParams.category === 'string' ? searchParams.category : undefined;
 
+  // Fetching data from our new API layer
   const [featuredAds, recentAds] = await Promise.all([
     getFeaturedAds(),
     getRecentAds(),
   ]);
 
-  // Filter ads based on search
+  // This part is a placeholder for now. 
+  // Once auth is ready, we will fetch the real user and their favorites.
+  const user = null; 
+  const userFavoriteAdIds: string[] = user ? await getUserFavorites(user.id) : [];
+
+  // --- Filtering Logic ---
   let displayedAds = recentAds;
-  if (params.search) {
-    const searchLower = params.search.toLowerCase();
-    displayedAds = recentAds.filter(
+
+  if (category) {
+    displayedAds = displayedAds.filter((ad) => ad.category_id === category);
+  }
+
+  if (search) {
+    const searchLower = search.toLowerCase();
+    displayedAds = displayedAds.filter(
       (ad) =>
         ad.title.toLowerCase().includes(searchLower) ||
         ad.description.toLowerCase().includes(searchLower)
     );
   }
 
-  if (params.category) {
-    displayedAds = displayedAds.filter((ad) => ad.category_id === params.category);
-  }
-
   return (
     <div className="container mx-auto px-4 py-8 min-h-screen">
-      {/* Hero Section */}
       <HeroSection />
 
-      {/* Categories */}
-      <Suspense fallback={
-        <div className="animate-pulse space-y-4 mb-12">
-          <div className="h-8 bg-white/5 rounded-lg w-48"></div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-            {[...Array(10)].map((_, i) => (
-              <div key={i} className="h-32 bg-white/5 rounded-xl"></div>
-            ))}
-          </div>
-        </div>
-      }>
+      <Suspense fallback={<CategoryListSkeleton />}>
         <CategoryList />
       </Suspense>
 
-      {/* Stats */}
       <StatsSection
         featuredCount={featuredAds.length}
         activeCount={recentAds.length}
         totalViews={recentAds.reduce((sum, ad) => sum + (ad.views_count || 0), 0)}
       />
 
-      {/* Featured Ads */}
       {featuredAds.length > 0 && (
         <div className="mb-12">
           <div className="flex items-center justify-between mb-6">
@@ -178,24 +81,12 @@ export default async function Home({
         </div>
       )}
 
-      {/* Recent Ads */}
       <div>
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-3xl font-bold gradient-text">آگهی‌های جدید</h2>
         </div>
         {displayedAds.length === 0 ? (
-          <Card className="glass-effect border-white/10">
-            <CardContent className="py-16 text-center">
-              <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 flex items-center justify-center">
-                <Sparkles className="h-12 w-12 text-indigo-400" />
-              </div>
-              <p className="text-muted-foreground text-lg">
-                {params.search
-                  ? `نتیجه‌ای برای "${params.search}" یافت نشد.`
-                  : 'در حال حاضر آگهی برای نمایش وجود ندارد.'}
-              </p>
-            </CardContent>
-          </Card>
+          <NoResultsCard search={search} />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {displayedAds.map((ad) => (
@@ -210,4 +101,34 @@ export default async function Home({
       </div>
     </div>
   );
+}
+
+function CategoryListSkeleton() {
+  return (
+    <div className="animate-pulse space-y-4 mb-12">
+      <div className="h-8 bg-white/5 rounded-lg w-48"></div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+        {[...Array(10)].map((_, i) => (
+          <div key={i} className="h-32 bg-white/5 rounded-xl"></div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function NoResultsCard({ search }: { search?: string }) {
+  return (
+    <Card className="glass-effect border-white/10">
+      <CardContent className="py-16 text-center">
+        <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 flex items-center justify-center">
+          <Sparkles className="h-12 w-12 text-indigo-400" />
+        </div>
+        <p className="text-muted-foreground text-lg">
+          {search
+            ? `نتیجه‌ای برای "${search}" یافت نشد.`
+            : 'در حال حاضر آگهی برای نمایش وجود ندارد.'}
+        </p>
+      </CardContent>
+    </Card>
+  )
 }

@@ -1,57 +1,13 @@
-import { Category } from "../lib/supabase";
+import { Category } from "@/types";
+import { getCategories } from "@/lib/api";
 import Link from "next/link";
-import { createClient } from '@supabase/supabase-js';
 import { Card, CardContent } from "@/components/ui/card";
 import { motion } from 'framer-motion';
-
-const supabaseClient = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
-async function getCategories(): Promise<Category[]> {
-  try {
-    const { data, error } = await supabaseClient
-      .from('categories')
-      .select('*')
-      .is('parent_id', null)
-      .eq('is_active', true)
-      .order('sort_order');
-
-    if (error) {
-      // اگر جدول وجود ندارد، از داده‌های استاتیک استفاده کن
-      if (error.code === 'PGRST116' || error.message?.includes('relation') || error.message?.includes('does not exist')) {
-        console.warn('Categories table does not exist yet. Using static data.');
-        return getStaticCategories();
-      }
-      console.error('Error fetching categories:', error);
-      return getStaticCategories();
-    }
-    return data && data.length > 0 ? data : getStaticCategories();
-  } catch (err) {
-    console.warn('Error connecting to Supabase:', err);
-    return getStaticCategories();
-  }
-}
-
-function getStaticCategories(): Category[] {
-  return [
-    { id: '1', name: 'املاک', icon: '🏠', parent_id: null, created_at: new Date().toISOString() },
-    { id: '2', name: 'خودرو', icon: '🚗', parent_id: null, created_at: new Date().toISOString() },
-    { id: '3', name: 'استخدام و کار', icon: '💼', parent_id: null, created_at: new Date().toISOString() },
-    { id: '4', name: 'خدمات', icon: '🔧', parent_id: null, created_at: new Date().toISOString() },
-    { id: '5', name: 'وسایل الکترونیکی', icon: '📱', parent_id: null, created_at: new Date().toISOString() },
-    { id: '6', name: 'خانه و باغ', icon: '🏡', parent_id: null, created_at: new Date().toISOString() },
-    { id: '7', name: 'مد و زیبایی', icon: '👗', parent_id: null, created_at: new Date().toISOString() },
-    { id: '8', name: 'ورزش و سرگرمی', icon: '⚽', parent_id: null, created_at: new Date().toISOString() },
-    { id: '9', name: 'تجاری و صنعتی', icon: '🏭', parent_id: null, created_at: new Date().toISOString() },
-  ];
-}
 
 export default async function CategoryList() {
   const categories = await getCategories();
 
-  if (categories.length === 0) {
+  if (!categories || categories.length === 0) {
     return (
       <Card className="glass-effect border-white/10 mb-8">
         <CardContent className="py-12 text-center">
@@ -81,7 +37,7 @@ export default async function CategoryList() {
             transition={{ duration: 0.3, delay: index * 0.05 }}
           >
             <Link
-              href={`/?category=${category.id}`}
+              href={`/?category=${category.slug}`}
               className="block h-full group"
             >
               <Card className="h-full glass-effect border-white/10 hover-lift overflow-hidden relative">

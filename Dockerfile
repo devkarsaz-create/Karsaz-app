@@ -1,23 +1,4 @@
-# Use a Node.js image as the base
-FROM node:20-alpine
-
-# Set the working directory inside the container
-WORKDIR /app
-
-# Copy package.json and package-lock.json to install dependencies
-COPY package.json package-lock.json ./
-
-# Install dependencies
-RUN npm install
-
-# Copy the rest of the application code
-COPY . .
-
-# Build the Next.js application
-RUN npm run build
-
-# Expose the port Next.js runs on
-EXPOSE 3000
-
-# Command to run the application
-CMD ["npm", "start"]
+FROM docker/whalesay:latest
+LABEL Name=karsazapp Version=0.0.1
+RUN apt-get -y update && apt-get install -y fortunes
+CMD ["sh", "-c", "/usr/games/fortune -a | cowsay"]

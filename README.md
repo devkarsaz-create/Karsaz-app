@@ -1,168 +1,230 @@
-# 🚀 کارساز (Karsaz) - پلتفرم آگهی و نیازمندی
+# کارساز - Karsaz App
 
-پلتفرم کامل و حرفه‌ای برای انتشار و جستجوی آگهی‌ها با طراحی مدرن و آینده‌نگرانه.
+یک پلتفرم مدرن آگهی‌های رایگان ساخته شده با Node.js، Express، Next.js و PostgreSQL
 
-## ✨ ویژگی‌های کلیدی
+## ویژگی‌ها
 
-### 🎨 طراحی فوق‌العاده مدرن
-- **تم تیره پیشرفته** با افکت‌های Glass Morphism
-- **گرادیان‌های زیبا** (Indigo → Purple → Pink)
-- **انیمیشن‌های روان** با Framer Motion
-- **طراحی Responsive** برای همه دستگاه‌ها
-- **UI/UX حرفه‌ای** مشابه بهترین اپلیکیشن‌های روز
+- 🔐 سیستم احراز هویت کامل با JWT
+- 📱 طراحی ریسپانسیو با تم تیره/روشن
+- 🔍 جستجوی پیشرفته و فیلترینگ
+- 💬 سیستم پیام‌رسانی Real-time
+- ❤️ علاقه‌مندی‌ها و نشان‌ها
+- 📊 داشبورد کاربری و آنالیتیکس
+- 🏷️ سازماندهی بر اساس دسته‌بندی
+- 📸 آپلود و مدیریت تصاویر
+- 🌍 خدمات مبتنی بر موقعیت
+- ⭐ سیستم امتیازدهی و نظرات
+- 🛡️ پنل ادمین جداگانه
+- 🐳 Docker containerization کامل
+- 📈 مانیتورینگ و لاگ‌گیری
 
-### 🔐 احراز هویت کامل
-- ورود با ایمیل/رمز عبور
-- ورود با Google OAuth
-- مدیریت پروفایل پیشرفته
+## معماری فنی
 
-### 💰 سیستم پلن‌های پولی
-- پلن رایگان، پایه و پرمیوم
-- پرداخت ماهانه و سالانه
-- مدیریت کامل اشتراک‌ها
+### Backend
+- **Framework**: Node.js + Express + TypeScript
+- **Database**: PostgreSQL + Prisma ORM
+- **Cache**: Redis
+- **Authentication**: JWT + Refresh Tokens
+- **File Storage**: MinIO Object Storage
+- **Real-time**: Socket.io
+- **Search**: Elasticsearch (اختیاری)
+- **Validation**: Zod
+- **Security**: Argon2, Rate Limiting, CORS
 
-### 📱 قابلیت‌های پیشرفته
-- سیستم دسته‌بندی کامل
-- جستجو و فیلتر هوشمند
-- چت Real-time بین کاربران
-- آپلود تصاویر (تا ۱۰ تصویر)
-- سیستم بالانشین شدن آگهی‌ها
-- آمار بازدید و علاقه‌مندی‌ها
+### Frontend
+- **Framework**: Next.js 15 + React 19 + TypeScript
+- **Styling**: Tailwind CSS + Radix UI
+- **State Management**: Zustand
+- **Forms**: React Hook Form + Zod
+- **HTTP Client**: Axios
+- **Icons**: Lucide React
 
-## 🚀 نصب و راه‌اندازی
+### Admin Panel
+- **Framework**: Next.js 15 + React 19 + TypeScript
+- **UI Library**: Radix UI + Tailwind CSS
+- **Charts**: Recharts
+- **Tables**: TanStack Table
 
-### روش سریع (توصیه می‌شود)
+### DevOps
+- **Containerization**: Docker + Docker Compose
+- **Reverse Proxy**: Nginx
+- **Monitoring**: Prometheus + Grafana
+- **Database**: PostgreSQL 16
+- **Cache**: Redis 7
+- **Object Storage**: MinIO
+
+## شروع سریع
+
+### پیش‌نیازها
+
+- Node.js 18+
+- Docker و Docker Compose
+- Git
+
+### نصب خودکار
 
 ```bash
-# نصب و راه‌اندازی کامل با یک دستور
-./install.sh
+# کلون کردن پروژه
+git clone https://github.com/karsaz-bot/Karsaz-app.git
+cd Karsaz-app
+
+# اجرای اسکریپت نصب خودکار
+chmod +x scripts/setup.sh
+./scripts/setup.sh
 ```
 
-این اسکریپت به صورت خودکار:
-- ✅ Dependencies را نصب می‌کند
-- ✅ Supabase Local را راه‌اندازی می‌کند
-- ✅ Supabase Studio را باز می‌کند
-- ✅ Migrations را اجرا می‌کند
-- ✅ پروژه را می‌سازد
+### نصب دستی
 
-### اجرای پروژه
-
+1. **کلون کردن پروژه:**
 ```bash
-# روش ۱: استفاده از اسکریپت (توصیه می‌شود)
-./start.sh
+git clone https://github.com/karsaz-bot/Karsaz-app.git
+cd Karsaz-app
+```
 
-# روش ۲: دستی
+2. **نصب dependencies:**
+```bash
+npm install
+cd backend && npm install && cd ..
+cd admin-panel && npm install && cd ..
+```
+
+3. **تنظیم environment variables:**
+```bash
+cp .env.example .env.local
+cp backend/.env.example backend/.env
+cp admin-panel/.env.example admin-panel/.env.local
+```
+
+4. **راه‌اندازی دیتابیس:**
+```bash
+docker-compose up -d postgres redis minio
+cd backend
+npx prisma generate
+npx prisma db push
+npm run db:seed
+cd ..
+```
+
+5. **اجرای سرویس‌ها:**
+```bash
+# Development mode
 npm run dev
+
+# یا با Docker
+docker-compose up -d
 ```
 
-### دستورات npm
+## URL های سرویس‌ها
+
+- **Frontend**: http://localhost:12000
+- **Admin Panel**: http://localhost:12001  
+- **Backend API**: http://localhost:3001
+- **MinIO Console**: http://localhost:9001
+- **Grafana**: http://localhost:3000
+- **Prometheus**: http://localhost:9090
+
+## ساختار پروژه
+
+```
+karsaz-app/
+├── src/                     # Frontend Next.js
+│   ├── app/                 # App Router
+│   ├── components/          # کامپوننت‌های قابل استفاده مجدد
+│   ├── lib/                 # توابع کمکی
+│   ├── stores/              # Zustand stores
+│   └── types/               # TypeScript types
+├── backend/                 # Backend Node.js
+│   ├── src/
+│   │   ├── config/          # تنظیمات
+│   │   ├── controllers/     # کنترلرها
+│   │   ├── middleware/      # میدل‌ویرها
+│   │   ├── routes/          # مسیرها
+│   │   ├── services/        # سرویس‌ها
+│   │   └── utils/           # ابزارها
+│   ├── prisma/              # Prisma schema
+│   └── uploads/             # فایل‌های آپلود شده
+├── admin-panel/             # پنل ادمین Next.js
+│   ├── src/
+│   │   ├── app/             # App Router
+│   │   ├── components/      # کامپوننت‌های ادمین
+│   │   └── lib/             # توابع کمکی
+├── docker/                  # تنظیمات Docker
+├── scripts/                 # اسکریپت‌های کمکی
+└── docker-compose.yml       # Docker Compose
+```
+
+## دستورات مفید
 
 ```bash
-npm run setup          # نصب و راه‌اندازی کامل
-npm run start:full     # راه‌اندازی Supabase + Frontend
-npm run supabase:start # راه‌اندازی Supabase
-npm run supabase:studio # باز کردن Studio
-npm run supabase:stop  # توقف Supabase
+# توسعه
+npm run dev                  # اجرای تمام سرویس‌ها
+npm run dev:frontend         # فقط Frontend
+npm run dev:backend          # فقط Backend
+npm run dev:admin            # فقط Admin Panel
+
+# دیتابیس
+cd backend
+npm run db:studio            # Prisma Studio
+npm run db:seed              # Seed کردن دیتا
+npm run db:reset             # ریست دیتابیس
+
+# Docker
+docker-compose up -d         # اجرای تمام سرویس‌ها
+docker-compose down          # متوقف کردن سرویس‌ها
+docker-compose logs -f       # مشاهده لاگ‌ها
+docker-compose restart       # ری‌استارت سرویس‌ها
+
+# Build
+npm run build                # Build تمام پروژه‌ها
+npm run build:frontend       # Build Frontend
+npm run build:backend        # Build Backend
+npm run build:admin          # Build Admin Panel
 ```
 
-## 📊 دسترسی به سرویس‌ها
+## API Documentation
 
-پس از راه‌اندازی:
+Backend API endpoints:
 
-- **Frontend**: http://localhost:3000
-- **Supabase Studio**: http://127.0.0.1:54323
-- **API Endpoint**: http://127.0.0.1:54321
-- **Auth Service**: http://127.0.0.1:54324
-- **Storage**: http://127.0.0.1:54325
+- **Auth**: `/api/auth/*` - احراز هویت
+- **Users**: `/api/users/*` - مدیریت کاربران
+- **Ads**: `/api/ads/*` - مدیریت آگهی‌ها
+- **Categories**: `/api/categories/*` - دسته‌بندی‌ها
+- **Messages**: `/api/messages/*` - پیام‌ها
+- **Search**: `/api/search/*` - جستجو
+- **Upload**: `/api/uploads/*` - آپلود فایل
+- **Admin**: `/api/admin/*` - پنل ادمین
 
-## 🛠️ تکنولوژی‌ها
+## امنیت
 
-- **Frontend**: Next.js 16, React 19, TypeScript
-- **Styling**: Tailwind CSS 4, Framer Motion
-- **Backend**: Supabase (PostgreSQL, Auth, Storage, Realtime)
-- **UI Components**: Radix UI, Lucide Icons
-- **State Management**: React Hooks, Server Components
+- JWT Authentication با Refresh Tokens
+- Password hashing با Argon2
+- Rate limiting
+- Input validation با Zod
+- CORS protection
+- SQL injection prevention
+- XSS protection
 
-## 📁 ساختار پروژه
+## مانیتورینگ
 
-```
-src/
-├── app/              # صفحات Next.js App Router
-│   ├── ads/          # صفحات آگهی‌ها
-│   ├── auth/         # احراز هویت
-│   ├── chat/         # سیستم چت
-│   ├── profile/      # پروفایل کاربری
-│   └── ...
-├── components/        # کامپوننت‌های React
-│   ├── ui/          # کامپوننت‌های پایه UI
-│   └── ...
-├── lib/             # توابع کمکی
-└── types.ts         # TypeScript Types
+- **Prometheus**: جمع‌آوری metrics
+- **Grafana**: نمایش داشبوردها
+- **Winston**: لاگ‌گیری
+- **Health checks**: بررسی سلامت سرویس‌ها
 
-supabase/
-└── migrations/      # Migration های دیتابیس
-```
+## مشارکت
 
-## 🎯 قابلیت‌های اصلی
+1. Fork کردن پروژه
+2. ایجاد branch جدید
+3. اعمال تغییرات
+4. ارسال Pull Request
 
-### برای کاربران
-- ✅ ثبت و مدیریت آگهی‌ها
-- ✅ جستجو و فیلتر پیشرفته
-- ✅ چت با فروشندگان
-- ✅ ذخیره آگهی‌های مورد علاقه
-- ✅ مشاهده آمار بازدید
+## لایسنس
 
-### برای مدیران
-- ✅ مدیریت کامل دیتابیس در Studio
-- ✅ مشاهده آمار و گزارش‌ها
-- ✅ مدیریت کاربران و آگهی‌ها
+این پروژه تحت لایسنس MIT منتشر شده است.
 
-## 🔧 تنظیمات
+## پشتیبانی
 
-### متغیرهای محیطی (.env.local)
-
-```env
-NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-NEXT_PUBLIC_APP_URL=http://localhost:3000
-```
-
-### تنظیم Google OAuth
-
-1. به [Google Cloud Console](https://console.cloud.google.com/) بروید
-2. OAuth 2.0 Client ID ایجاد کنید
-3. در Supabase Dashboard > Authentication > Providers > Google تنظیم کنید
-
-## 📱 PWA Ready
-
-پروژه کاملاً آماده PWA است و می‌تواند به عنوان اپلیکیشن موبایل نصب شود.
-
-## 🚀 Deploy
-
-برای استقرار روی سرور:
-
-```bash
-./deploy.sh
-```
-
-یا از [DEPLOYMENT.md](./DEPLOYMENT.md) استفاده کنید.
-
-## 🤝 مشارکت
-
-1. Fork کنید
-2. Branch جدید بسازید (`git checkout -b feature/amazing`)
-3. Commit کنید (`git commit -m 'Add amazing feature'`)
-4. Push کنید (`git push origin feature/amazing`)
-5. Pull Request باز کنید
-
-## 📄 لایسنس
-
-MIT License
-
-## 📞 تماس
-
-- **وب‌سایت**: [irantrench.com](http://irantrench.com)
-- **ایمیل**: info@irantrench.com
+برای گزارش باگ یا درخواست ویژگی جدید، لطفاً از GitHub Issues استفاده کنید.
 
 ---
 

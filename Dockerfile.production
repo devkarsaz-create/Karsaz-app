@@ -1,0 +1,131 @@
+# Multi-stage production Dockerfile for complete Karsaz App
+# This builds all services in a single optimized image
+
+# Stage 1: Base Node.js image
+FROM node:20-alpine AS base
+RUN apk add --no-cache libc6-compat curl
+WORKDIR /app
+
+# Stage 2: Install dependencies
+FROM base AS deps
+# Copy package files for all services
+COPY package*.json ./
+COPY backend/package*.json ./backend/
+COPY admin-panel/package*.json ./admin-panel/
+
+# Install dependencies for all services
+RUN npm ci --only=production && npm cache clean --force
+RUN cd backend && npm ci --only=production && npm cache clean --force
+RUN cd admin-panel && npm ci --only=production && npm cache clean --force
+
+# Stage 3: Build backend
+FROM base AS backend-builder
+WORKDIR /app/backend
+
+# Copy backend source
+COPY backend/package*.json ./
+COPY backend/tsconfig.json ./
+COPY backend/prisma ./prisma/
+COPY backend/src ./src/
+
+# Install all dependencies (including dev)
+RUN npm ci
+
+# Generate Prisma client
+RUN npx prisma generate
+
+# Build backend
+RUN npm run build
+
+# Stage 4: Build frontend
+FROM base AS frontend-builder
+WORKDIR /app
+
+# Copy frontend source
+COPY package*.json ./
+COPY next.config.mjs ./
+COPY tailwind.config.ts ./
+COPY postcss.config.mjs ./
+COPY tsconfig.json ./
+
+# Install dependencies
+RUN npm ci
+
+# Copy source code
+COPY src ./src/
+COPY public ./public/
+
+# Build frontend
+ENV NEXT_TELEMETRY_DISABLED 1
+RUN npm run build
+
+# Stage 5: Build admin panel
+FROM base AS admin-builder
+WORKDIR /app/admin-panel
+
+# Copy admin panel source
+COPY admin-panel/package*.json ./
+COPY admin-panel/next.config.mjs ./
+COPY admin-panel/tailwind.config.ts ./
+COPY admin-panel/postcss.config.mjs ./
+COPY admin-panel/tsconfig.json ./
+
+# Install dependencies
+RUN npm ci
+
+# Copy source code
+COPY admin-panel/src ./src/
+COPY admin-panel/public ./public/
+
+# Build admin panel
+ENV NEXT_TELEMETRY_DISABLED 1
+RUN npm run build
+
+# Stage 6: Production runtime
+FROM base AS runtime
+
+# Create non-root user
+RUN addgroup --system --gid 1001 karsaz
+RUN adduser --system --uid 1001 karsaz
+
+# Install production dependencies
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/backend/node_modules ./backend/node_modules
+COPY --from=deps /app/admin-panel/node_modules ./admin-panel/node_modules
+
+# Copy built applications
+COPY --from=backend-builder --chown=karsaz:karsaz /app/backend/dist ./backend/dist
+COPY --from=backend-builder --chown=karsaz:karsaz /app/backend/prisma ./backend/prisma
+COPY --from=backend-builder --chown=karsaz:karsaz /app/backend/package*.json ./backend/
+
+COPY --from=frontend-builder --chown=karsaz:karsaz /app/.next/standalone ./frontend/
+COPY --from=frontend-builder --chown=karsaz:karsaz /app/.next/static ./frontend/.next/static
+COPY --from=frontend-builder --chown=karsaz:karsaz /app/public ./frontend/public
+
+COPY --from=admin-builder --chown=karsaz:karsaz /app/.next/standalone ./admin/
+COPY --from=admin-builder --chown=karsaz:karsaz /app/.next/static ./admin/.next/static
+COPY --from=admin-builder --chown=karsaz:karsaz /app/public ./admin/public
+
+# Copy startup scripts
+COPY scripts/start-production.sh ./scripts/
+RUN chmod +x ./scripts/start-production.sh
+
+# Create necessary directories
+RUN mkdir -p uploads logs && chown -R karsaz:karsaz uploads logs
+
+# Switch to non-root user
+USER karsaz
+
+# Expose ports
+EXPOSE 3000 3001 3002
+
+# Environment variables
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+  CMD curl -f http://localhost:3001/health || exit 1
+
+# Start all services
+CMD ["./scripts/start-production.sh"]

@@ -1,235 +1,262 @@
 version: '3.8'
 
 services:
-  # Next.js Application
-  karsaz-app:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: karsaz-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: karsaz
+      POSTGRES_USER: karsaz
+      POSTGRES_PASSWORD: karsaz_password_2024
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - karsaz-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U karsaz -d karsaz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: karsaz-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass redis_password_2024
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - karsaz-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # MinIO Object Storage
+  minio:
+    image: minio/minio:latest
+    container_name: karsaz-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: karsaz_minio
+      MINIO_ROOT_PASSWORD: karsaz_minio_password_2024
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    networks:
+      - karsaz-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # Elasticsearch (Optional - for advanced search)
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: karsaz-elasticsearch
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+    networks:
+      - karsaz-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: karsaz-backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgresql://karsaz:karsaz_password_2024@postgres:5432/karsaz
+      REDIS_URL: redis://:redis_password_2024@redis:6379
+      JWT_SECRET: karsaz_jwt_secret_very_long_and_secure_key_2024
+      JWT_REFRESH_SECRET: karsaz_jwt_refresh_secret_very_long_and_secure_key_2024
+      JWT_EXPIRES_IN: 15m
+      JWT_REFRESH_EXPIRES_IN: 7d
+      FRONTEND_URL: http://localhost:12000
+      ADMIN_URL: http://localhost:12001
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: 9000
+      MINIO_ACCESS_KEY: karsaz_minio
+      MINIO_SECRET_KEY: karsaz_minio_password_2024
+      MINIO_BUCKET_NAME: karsaz-uploads
+      MINIO_USE_SSL: false
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+    volumes:
+      - ./backend/uploads:/app/uploads
+      - ./backend/logs:/app/logs
+    ports:
+      - "3001:3001"
+    networks:
+      - karsaz-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Frontend Application
+  frontend:
     build:
       context: .
+      dockerfile: Dockerfile.frontend
+    container_name: karsaz-frontend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: http://localhost:3001/api
+      NEXT_PUBLIC_SOCKET_URL: http://localhost:3001
+      NEXT_PUBLIC_MINIO_URL: http://localhost:9000
+    ports:
+      - "12000:3000"
+    networks:
+      - karsaz-network
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Admin Panel
+  admin:
+    build:
+      context: ./admin-panel
       dockerfile: Dockerfile
-    container_name: karsaz-app
+    container_name: karsaz-admin
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: http://localhost:3001/api
+      NEXT_PUBLIC_SOCKET_URL: http://localhost:3001
     ports:
-      - "3000:3000"
-    environment:
-      - NODE_ENV=production
-      - NEXT_PUBLIC_SUPABASE_URL=http://api.irantrench.com
-      - NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
-      - SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
-      - DATABASE_URL=postgresql://postgres:postgres@supabase-db:5432/postgres
+      - "12001:3000"
+    networks:
+      - karsaz-network
     depends_on:
-      - supabase-db
-      - supabase-api
-    networks:
-      - karsaz-network
-    restart: unless-stopped
-
-  # Supabase Database
-  supabase-db:
-    image: supabase/postgres:15.1.0.147
-    container_name: supabase-db
-    ports:
-      - "54322:5432"
-    environment:
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_USER=postgres
-      - POSTGRES_DB=postgres
-    volumes:
-      - supabase-db-data:/var/lib/postgresql/data
-      - ./supabase/migrations:/docker-entrypoint-initdb.d
-    networks:
-      - karsaz-network
-    restart: unless-stopped
-
-  # Supabase API (Kong + PostgREST)
-  supabase-api:
-    image: supabase/kong:2.8.3
-    container_name: supabase-api
-    ports:
-      - "54321:8000"
-    environment:
-      - KONG_DATABASE=off
-      - KONG_DECLARATIVE_CONFIG=/var/lib/kong/kong.yml
-      - KONG_DNS_ORDER=LAST,A,CNAME
-      - KONG_PLUGINS=request-transformer,cors,key-auth,acl,basic-auth
-      - KONG_NGINX_PROXY_PROXY_BUFFER_SIZE=160k
-      - KONG_NGINX_PROXY_PROXY_BUFFERS=64 160k
-    volumes:
-      - ./supabase/config/kong.yml:/var/lib/kong/kong.yml:ro
-    depends_on:
-      - supabase-db
-      - supabase-rest
-      - supabase-auth
-    networks:
-      - karsaz-network
-    restart: unless-stopped
-
-  # PostgREST
-  supabase-rest:
-    image: postgrest/postgrest:v12.0.1
-    container_name: supabase-rest
-    environment:
-      - PGRST_DB_URI=postgresql://authenticator:postgres@supabase-db:5432/postgres
-      - PGRST_DB_SCHEMAS=public,storage,graphql_public
-      - PGRST_DB_ANON_ROLE=anon
-      - PGRST_JWT_SECRET=super-secret-jwt-token-with-at-least-32-characters-long
-      - PGRST_DB_USE_LEGACY_GUCS=false
-      - PGRST_APP_SETTINGS_JWT_SECRET=super-secret-jwt-token-with-at-least-32-characters-long
-      - PGRST_APP_SETTINGS_JWT_EXP=3600
-    depends_on:
-      - supabase-db
-    networks:
-      - karsaz-network
-    restart: unless-stopped
-
-  # Supabase Auth (GoTrue)
-  supabase-auth:
-    image: supabase/gotrue:v2.143.0
-    container_name: supabase-auth
-    environment:
-      - GOTRUE_API_HOST=0.0.0.0
-      - GOTRUE_API_PORT=9999
-      - API_EXTERNAL_URL=http://api.irantrench.com
-      - GOTRUE_DB_DRIVER=postgres
-      - GOTRUE_DB_DATABASE_URL=postgresql://supabase_auth_admin:postgres@supabase-db:5432/postgres
-      - GOTRUE_SITE_URL=http://irantrench.com
-      - GOTRUE_URI_ALLOW_LIST=http://irantrench.com,http://localhost:3000
-      - GOTRUE_DISABLE_SIGNUP=false
-      - GOTRUE_JWT_ADMIN_ROLES=service_role
-      - GOTRUE_JWT_AUD=authenticated
-      - GOTRUE_JWT_DEFAULT_GROUP_NAME=authenticated
-      - GOTRUE_JWT_EXP=3600
-      - GOTRUE_JWT_SECRET=super-secret-jwt-token-with-at-least-32-characters-long
-      - GOTRUE_EXTERNAL_EMAIL_ENABLED=true
-      - GOTRUE_MAILER_AUTOCONFIRM=false
-      - GOTRUE_SMTP_ADMIN_EMAIL=admin@irantrench.com
-      - GOTRUE_SMTP_HOST=supabase-inbucket
-      - GOTRUE_SMTP_PORT=2500
-      - GOTRUE_SMTP_USER=fake_mail_user
-      - GOTRUE_SMTP_PASS=fake_mail_password
-      - GOTRUE_SMTP_SENDER_NAME=fake_sender
-      - GOTRUE_MAILER_URLPATHS_INVITE=/auth/v1/verify
-      - GOTRUE_MAILER_URLPATHS_CONFIRMATION=/auth/v1/verify
-      - GOTRUE_MAILER_URLPATHS_RECOVERY=/auth/v1/verify
-      - GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE=/auth/v1/verify
-    depends_on:
-      - supabase-db
-    networks:
-      - karsaz-network
-    restart: unless-stopped
-
-  # Supabase Studio
-  supabase-studio:
-    image: supabase/studio:20240326-5e5586d
-    container_name: supabase-studio
-    ports:
-      - "54323:3000"
-    environment:
-      - STUDIO_PG_META_URL=http://supabase-meta:8080
-      - POSTGRES_PASSWORD=postgres
-      - DEFAULT_ORGANIZATION_NAME=Karsaz
-      - DEFAULT_PROJECT_NAME=Karsaz App
-      - SUPABASE_URL=http://api.irantrench.com
-      - SUPABASE_REST_URL=http://supabase-api:8000/rest/v1/
-      - SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
-      - SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
-    networks:
-      - karsaz-network
-    restart: unless-stopped
-
-  # Supabase Meta
-  supabase-meta:
-    image: supabase/postgres-meta:v0.80.0
-    container_name: supabase-meta
-    environment:
-      - PG_META_PORT=8080
-      - PG_META_DB_HOST=supabase-db
-      - PG_META_DB_PORT=5432
-      - PG_META_DB_NAME=postgres
-      - PG_META_DB_USER=supabase_admin
-      - PG_META_DB_PASSWORD=postgres
-    depends_on:
-      - supabase-db
-    networks:
-      - karsaz-network
-    restart: unless-stopped
-
-  # Supabase Storage
-  supabase-storage:
-    image: supabase/storage-api:v1.0.6
-    container_name: supabase-storage
-    environment:
-      - ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
-      - SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
-      - POSTGREST_URL=http://supabase-rest:3000
-      - PGOPTIONS=-c search_path=storage,public
-      - DATABASE_URL=postgresql://supabase_storage_admin:postgres@supabase-db:5432/postgres
-      - FILE_SIZE_LIMIT=52428800
-      - STORAGE_BACKEND=file
-      - FILE_STORAGE_BACKEND_PATH=/var/lib/storage
-      - TENANT_ID=stub
-      - REGION=stub
-      - GLOBAL_S3_BUCKET=stub
-      - ENABLE_IMAGE_TRANSFORMATION=true
-      - IMGPROXY_URL=http://supabase-imgproxy:5001
-    volumes:
-      - supabase-storage-data:/var/lib/storage
-    depends_on:
-      - supabase-db
-      - supabase-rest
-    networks:
-      - karsaz-network
-    restart: unless-stopped
-
-  # Image Proxy for Storage
-  supabase-imgproxy:
-    image: darthsim/imgproxy:v3.8.0
-    container_name: supabase-imgproxy
-    environment:
-      - IMGPROXY_BIND=0.0.0.0:5001
-      - IMGPROXY_LOCAL_FILESYSTEM_ROOT=/
-      - IMGPROXY_USE_ETAG=true
-      - IMGPROXY_ENABLE_WEBP_DETECTION=true
-    volumes:
-      - supabase-storage-data:/var/lib/storage:ro
-    networks:
-      - karsaz-network
-    restart: unless-stopped
-
-  # Inbucket (Email testing)
-  supabase-inbucket:
-    image: inbucket/inbucket:3.0.3
-    container_name: supabase-inbucket
-    ports:
-      - "54324:9000"
-    environment:
-      - INBUCKET_WEB_ADDR=0.0.0.0:9000
-      - INBUCKET_POP3_ADDR=0.0.0.0:1100
-      - INBUCKET_SMTP_ADDR=0.0.0.0:2500
-    networks:
-      - karsaz-network
-    restart: unless-stopped
+      - backend
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   # Nginx Reverse Proxy
   nginx:
     image: nginx:alpine
     container_name: karsaz-nginx
+    restart: unless-stopped
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d
+      - ./docker/ssl:/etc/nginx/ssl
     ports:
       - "80:80"
       - "443:443"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro
-    depends_on:
-      - karsaz-app
-      - supabase-api
-      - supabase-studio
     networks:
       - karsaz-network
+    depends_on:
+      - frontend
+      - admin
+      - backend
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Monitoring with Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: karsaz-prometheus
     restart: unless-stopped
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - karsaz-network
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+
+  # Grafana Dashboard
+  grafana:
+    image: grafana/grafana:latest
+    container_name: karsaz-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: grafana_admin_2024
+      GF_USERS_ALLOW_SIGN_UP: false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning
+    ports:
+      - "3000:3000"
+    networks:
+      - karsaz-network
+    depends_on:
+      - prometheus
 
 volumes:
-  supabase-db-data:
-  supabase-storage-data:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  minio_data:
+    driver: local
+  elasticsearch_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
 
 networks:
   karsaz-network:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

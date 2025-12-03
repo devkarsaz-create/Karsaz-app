@@ -1,0 +1,289 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: karsaz-postgres-prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-karsaz}
+      POSTGRES_USER: ${POSTGRES_USER:-karsaz}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-karsaz_password_2024}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - karsaz-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-karsaz} -d ${POSTGRES_DB:-karsaz}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: karsaz-redis-prod
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_password_2024}
+    volumes:
+      - redis_data:/data
+    networks:
+      - karsaz-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+  # MinIO Object Storage
+  minio:
+    image: minio/minio:latest
+    container_name: karsaz-minio-prod
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-karsaz_minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-karsaz_minio_password_2024}
+    volumes:
+      - minio_data:/data
+    networks:
+      - karsaz-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  # Elasticsearch (Optional)
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: karsaz-elasticsearch-prod
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - karsaz-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  # Karsaz App (All-in-One)
+  karsaz-app:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+    container_name: karsaz-app-prod
+    restart: unless-stopped
+    environment:
+      # Application
+      NODE_ENV: production
+      
+      # Database
+      DATABASE_URL: postgresql://${POSTGRES_USER:-karsaz}:${POSTGRES_PASSWORD:-karsaz_password_2024}@postgres:5432/${POSTGRES_DB:-karsaz}
+      
+      # Redis
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis_password_2024}@redis:6379
+      
+      # JWT
+      JWT_SECRET: ${JWT_SECRET:-karsaz_jwt_secret_very_long_and_secure_key_2024}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-karsaz_jwt_refresh_secret_very_long_and_secure_key_2024}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-15m}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+      
+      # URLs
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      ADMIN_URL: ${ADMIN_URL:-http://localhost:3002}
+      
+      # MinIO
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: 9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-karsaz_minio}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-karsaz_minio_password_2024}
+      MINIO_BUCKET_NAME: ${MINIO_BUCKET_NAME:-karsaz-uploads}
+      MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
+      
+      # Email
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      SMTP_FROM: ${SMTP_FROM:-noreply@karsaz.com}
+      
+      # Optional
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+      SENTRY_DSN: ${SENTRY_DSN}
+      SEED_DATABASE: ${SEED_DATABASE:-true}
+      
+      # Next.js
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001/api}
+      NEXT_PUBLIC_SOCKET_URL: ${NEXT_PUBLIC_SOCKET_URL:-http://localhost:3001}
+      NEXT_PUBLIC_MINIO_URL: ${NEXT_PUBLIC_MINIO_URL:-http://localhost:9000}
+      NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-کارساز}
+      NEXT_PUBLIC_APP_VERSION: ${NEXT_PUBLIC_APP_VERSION:-2.0.0}
+      
+    volumes:
+      - app_uploads:/app/uploads
+      - app_logs:/app/logs
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"    # Frontend
+      - "${BACKEND_PORT:-3001}:3001"     # Backend API
+      - "${ADMIN_PORT:-3002}:3002"       # Admin Panel
+    networks:
+      - karsaz-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: karsaz-nginx-prod
+    restart: unless-stopped
+    volumes:
+      - ./docker/nginx/nginx.prod.conf:/etc/nginx/nginx.conf
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d
+      - ./docker/ssl:/etc/nginx/ssl
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    networks:
+      - karsaz-network
+    depends_on:
+      - karsaz-app
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+
+  # Prometheus Monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: karsaz-prometheus-prod
+    restart: unless-stopped
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    networks:
+      - karsaz-network
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+  # Grafana Dashboard
+  grafana:
+    image: grafana/grafana:latest
+    container_name: karsaz-grafana-prod
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-grafana_admin_2024}
+      GF_USERS_ALLOW_SIGN_UP: false
+      GF_INSTALL_PLUGINS: grafana-clock-panel,grafana-simple-json-datasource
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning
+    ports:
+      - "${GRAFANA_PORT:-3003}:3000"
+    networks:
+      - karsaz-network
+    depends_on:
+      - prometheus
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  minio_data:
+    driver: local
+  elasticsearch_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  app_uploads:
+    driver: local
+  app_logs:
+    driver: local
+
+networks:
+  karsaz-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
